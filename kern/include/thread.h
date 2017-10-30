@@ -159,7 +159,7 @@ __DEAD void thread_exit(void);
  * Interrupts need not be disabled.
  */
 void thread_yield(void);
-
+int thread_join(pid_t childpid, int *status, int options);
 /*
  * Reshuffle the run queue. Called from the timer interrupt.
  */

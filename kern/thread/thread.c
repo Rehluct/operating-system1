@@ -823,6 +823,62 @@ thread_yield(void)
  * the current CPU's run queue by job priority.
  */
 
+int thread_join(pid_t childpid, int *status, int options){
+
+
+	DEBUG(DB_THREADS, "\npid_join: parent=%d, child=%d, wnohang=%d\n",
+					curthread->t_pid, childpid, options);
+
+		/* checking unsupported/invalid options */
+		if (options != 0 && options != WNOHANG) {
+			return -EINVAL;
+		}
+
+		/* checking deadlock: joining myself */
+		if (childpid == curthread->t_pid) {
+			return -EDEADLK;
+		}
+
+		struct pidinfo *me;
+		struct pidinfo *child;
+
+		lock_acquire(pidlock);
+
+		me = pi_get(curthread->t_pid);
+		KASSERT(me != NULL);
+		KASSERT(me->pi_exited == false);
+
+		child = pi_get(childpid);
+
+		/* child not found */
+		if (child == NULL) {
+			lock_release(pidlock);
+			return -ESRCH;
+		}
+
+		if ( child->pi_ppid != me->pi_pid
+				|| child->pi_ppid == INVALID_PID ) {
+			lock_release(pidlock);
+			return -ECHILD;
+		}
+
+		/* child still running and parent wants to wait */
+		if (options != WNOHANG && child->pi_exited == false ) {
+			cv_wait(child->pi_cv, pidlock); // release mutex, sleep, wake up, lock mutex
+			KASSERT(child->pi_exited == true);
+		}
+
+		if (options == WNOHANG && child->pi_exited == false ) {
+			*status = 0;
+		} else {
+			*status = child->pi_exitstatus;
+		}
+
+		lock_release(pidlock);
+	return 0;
+
+
+}
 void
 schedule(void)
 {
